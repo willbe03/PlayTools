@@ -277,6 +277,7 @@ private let MAA_TOOLS_VERSION = 4
         else { return }
 
         for overlay in overlays {
+            await Self.relayout(overlay.webView)
             guard let image = await Self.snapshot(of: overlay.webView) else {
                 logger.error("Web view snapshot failed")
                 continue
@@ -297,6 +298,20 @@ private let MAA_TOOLS_VERSION = 4
             return frame.isEmpty ? [] : [WebViewOverlay(webView: webView, alpha: alpha, frame: frame)]
         }
         return view.subviews.flatMap { visibleWebViews(in: $0, alpha: alpha) }
+    }
+
+    // A page that sizes itself on load can keep a layout from before the web view had its final frame.
+    private static func relayout(_ webView: WKWebView) async {
+        await withCheckedContinuation { continuation in
+            var resumed = false
+            let finish = {
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume()
+            }
+            webView.evaluateJavaScript("window.dispatchEvent(new Event('resize'))") { _, _ in finish() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { finish() }
+        }
     }
 
     private static func snapshot(of webView: WKWebView) async -> CGImage? {
